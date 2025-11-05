@@ -144,14 +144,17 @@ export default function Home() {
   return (
     <main className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900">Gross Dividend Calculator</h1>
+        <h2 className="text-3xl font-bold mb-2 text-gray-900">Gross Dividend Calculator</h2>
+        <p className="text-gray-600 mb-8">
+          Track your USD dividend payments and calculate their EUR value using official ECB exchange rates.
+        </p>
         {/* Entry Form */}
         <div className="bg-white rounded-lg shadow mb-6">
           <button
             onClick={toggleForm}
             className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
           >
-            <h2 className="text-xl font-semibold text-gray-900">Add Dividend Payment</h2>
+            <h3 className="text-xl font-semibold text-gray-900">Add Dividend Payment</h3>
             <svg
               className={`w-5 h-5 text-gray-500 transition-transform ${isFormOpen ? 'rotate-180' : ''}`}
               fill="none"
@@ -213,7 +216,7 @@ export default function Home() {
         {dividends.length > 0 && (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="flex items-center justify-between p-6 pb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Dividend Payments</h2>
+              <h3 className="text-xl font-semibold text-gray-900">Dividend Payments</h3>
               <button
                 onClick={handleExport}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium text-sm"
