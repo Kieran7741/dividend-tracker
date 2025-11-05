@@ -161,6 +161,7 @@ export default function Home() {
                   </label>
                   <input
                     type="number"
+                    inputMode="decimal"
                     step="0.01"
                     value={dollarAmount}
                     onChange={(e) => setDollarAmount(e.target.value)}
