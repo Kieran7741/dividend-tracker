@@ -146,7 +146,7 @@ export default function Home() {
       <div className="max-w-4xl mx-auto">
         <h2 className="text-3xl font-bold mb-2 text-gray-900">Gross Dividend Calculator</h2>
         <p className="text-gray-600 mb-8">
-          Track your USD dividend payments and calculate their EUR value using official ECB exchange rates.
+          Track your USD dividend payments and calculate their EUR value using official ECB exchange rates. Note: this tool does not send any data to a server; all information is stored locally in your browser.
         </p>
         {/* Entry Form */}
         <div className="bg-white rounded-lg shadow mb-6">
