@@ -21,6 +21,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(true);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({});
+  const [dateRange, setDateRange] = useState<{ min: string; max: string } | null>(null);
 
   useEffect(() => {
     loadDividends();
@@ -46,6 +47,14 @@ export default function Home() {
       const response = await fetch('/exchange-rates.json');
       const rates = await response.json();
       setExchangeRates(rates);
+      
+      const dates = Object.keys(rates).sort();
+      if (dates.length > 0) {
+        setDateRange({
+          min: dates[0],
+          max: dates[dates.length - 1]
+        });
+      }
     } catch (error) {
       console.error('Failed to load exchange rates:', error);
     }
@@ -178,9 +187,16 @@ export default function Home() {
                     type="date"
                     value={paymentDate}
                     onChange={(e) => setPaymentDate(e.target.value)}
+                    min={dateRange?.min}
+                    max={dateRange?.max}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                   />
+                  {dateRange && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Exchange rates available from {new Date(dateRange.min).toLocaleDateString()} to {new Date(dateRange.max).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="submit"
