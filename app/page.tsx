@@ -144,7 +144,7 @@ export default function Home() {
   return (
     <main className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900">Dividend Tax Calculator</h1>
+        <h1 className="text-3xl font-bold mb-8 text-gray-900">Gross Dividend Calculator</h1>
         {/* Entry Form */}
         <div className="bg-white rounded-lg shadow mb-6">
           <button
