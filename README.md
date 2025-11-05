@@ -68,9 +68,3 @@ npm start
 ## Data Storage
 
 All dividend data is stored locally in your browser using localStorage. No data is sent to any server.
-
-## Deploy on Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/dividend-tax-calculator)
-
-The easiest way to deploy is using the [Vercel Platform](https://vercel.com/new).
