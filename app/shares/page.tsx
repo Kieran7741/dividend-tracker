@@ -2,22 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-
-interface Share {
-  id: string;
-  ticker: string;
-  sharesHeld: number;
-  purchasePrice: number;
-  purchaseDate: string;
-}
-
-interface TickerPrice {
-  [ticker: string]: number;
-}
-
-interface ExchangeRates {
-  [date: string]: number;
-}
+import type { Share, TickerPrice, ExchangeRates } from '../types';
+import { loadFromStorage, saveToStorage } from '../utils/storage';
+import { loadExchangeRates } from '../utils/exchangeRates';
+import { 
+  calculateProfitPerShare, 
+  calculateTotalProfit, 
+  calculatePercentageGain,
+  calculateTotalInvestment,
+  calculateCurrentValue,
+  calculatePortfolioProfit,
+  getPurchasePriceEur
+} from '../utils/calculations';
+import { downloadCSV, formatDate, getCurrentDateString } from '../utils/export';
 
 export default function Shares() {
   const [shares, setShares] = useState<Share[]>([]);
@@ -32,61 +29,27 @@ export default function Shares() {
   const [isFormOpen, setIsFormOpen] = useState(true);
 
   useEffect(() => {
-    loadShares();
-    loadTickerPrices();
-    loadExchangeRates();
-    loadFormState();
-  }, []);
+    const storedShares = loadFromStorage<Share[]>('shares', []);
+    setShares(storedShares);
+    setLoading(false);
 
-  const loadShares = () => {
-    try {
-      const stored = localStorage.getItem('shares');
-      if (stored) {
-        setShares(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load shares:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const storedPrices = loadFromStorage<TickerPrice>('tickerPrices', {});
+    setTickerPrices(storedPrices);
 
-  const loadTickerPrices = () => {
-    try {
-      const stored = localStorage.getItem('tickerPrices');
-      if (stored) {
-        setTickerPrices(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load ticker prices:', error);
-    }
-  };
+    const storedFormState = loadFromStorage<boolean>('isSharesFormOpen', true);
+    setIsFormOpen(storedFormState);
 
-  const loadExchangeRates = async () => {
-    try {
-      const response = await fetch('/exchange-rates.json');
-      const rates = await response.json();
+    const loadRates = async () => {
+      const rates = await loadExchangeRates();
       setExchangeRates(rates);
-    } catch (error) {
-      console.error('Failed to load exchange rates:', error);
-    }
-  };
-
-  const loadFormState = () => {
-    try {
-      const stored = localStorage.getItem('isSharesFormOpen');
-      if (stored !== null) {
-        setIsFormOpen(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load form state:', error);
-    }
-  };
+    };
+    loadRates();
+  }, []);
 
   const toggleForm = () => {
     const newState = !isFormOpen;
     setIsFormOpen(newState);
-    localStorage.setItem('isSharesFormOpen', JSON.stringify(newState));
+    saveToStorage('isSharesFormOpen', newState);
   };
 
   // Auto-populate current price when ticker changes
@@ -123,12 +86,12 @@ export default function Shares() {
 
     const updatedShares = [...shares, newShare];
     setShares(updatedShares);
-    localStorage.setItem('shares', JSON.stringify(updatedShares));
+    saveToStorage('shares', updatedShares);
     
     // Update ticker price
     const updatedPrices = { ...tickerPrices, [tickerUpper]: current_price };
     setTickerPrices(updatedPrices);
-    localStorage.setItem('tickerPrices', JSON.stringify(updatedPrices));
+    saveToStorage('tickerPrices', updatedPrices);
     
     setTicker('');
     setSharesHeld('');
@@ -140,59 +103,38 @@ export default function Shares() {
   const handleDelete = (id: string) => {
     const updatedShares = shares.filter(s => s.id !== id);
     setShares(updatedShares);
-    localStorage.setItem('shares', JSON.stringify(updatedShares));
+    saveToStorage('shares', updatedShares);
   };
 
   const handleUpdateCurrentPrice = (ticker: string, newPrice: number) => {
     const updatedPrices = { ...tickerPrices, [ticker]: newPrice };
     setTickerPrices(updatedPrices);
-    localStorage.setItem('tickerPrices', JSON.stringify(updatedPrices));
+    saveToStorage('tickerPrices', updatedPrices);
   };
 
   const getCurrentPrice = (ticker: string) => {
     return tickerPrices[ticker] || 0;
   };
 
-  const getPurchasePriceEur = (share: Share) => {
-    const rate = exchangeRates[share.purchaseDate];
-    if (!rate) return null;
-    return share.purchasePrice / rate;
-  };
-
-  const calculateProfit = (share: Share) => {
-    const currentPrice = getCurrentPrice(share.ticker);
-    return (currentPrice - share.purchasePrice) * share.sharesHeld;
-  };
-
-  const calculateProfitPerShare = (share: Share) => {
-    const currentPrice = getCurrentPrice(share.ticker);
-    return currentPrice - share.purchasePrice;
-  };
-
-  const calculatePercentageGain = (share: Share) => {
-    const currentPrice = getCurrentPrice(share.ticker);
-    return ((currentPrice - share.purchasePrice) / share.purchasePrice) * 100;
-  };
-
-  const totalInvestment = shares.reduce((sum, s) => sum + (s.purchasePrice * s.sharesHeld), 0);
-  const currentValue = shares.reduce((sum, s) => sum + (getCurrentPrice(s.ticker) * s.sharesHeld), 0);
-  const totalProfit = currentValue - totalInvestment;
-  const totalProfitPercentage = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
+  const totalInvestment = calculateTotalInvestment(shares);
+  const currentValue = calculateCurrentValue(shares, tickerPrices);
+  const { totalProfit, totalProfitPercentage } = calculatePortfolioProfit(shares, tickerPrices);
 
   const handleExport = () => {
     const headers = ['Ticker', 'Shares Held', 'Purchase Price (USD)', 'Purchase Price (EUR)', 'Current Price', 'Purchase Date', 'Profit per Share', 'Total Profit', 'Gain %'];
     const rows = shares.map(s => {
-      const eurPrice = getPurchasePriceEur(s);
+      const currentPrice = getCurrentPrice(s.ticker);
+      const eurPrice = getPurchasePriceEur(s, exchangeRates);
       return [
         s.ticker,
         s.sharesHeld.toString(),
         s.purchasePrice.toFixed(2),
         eurPrice ? eurPrice.toFixed(2) : 'N/A',
-        getCurrentPrice(s.ticker).toFixed(2),
-        new Date(s.purchaseDate).toLocaleDateString(),
-        calculateProfitPerShare(s).toFixed(2),
-        calculateProfit(s).toFixed(2),
-        calculatePercentageGain(s).toFixed(2)
+        currentPrice.toFixed(2),
+        formatDate(s.purchaseDate),
+        calculateProfitPerShare(s, currentPrice).toFixed(2),
+        calculateTotalProfit(s, currentPrice).toFixed(2),
+        calculatePercentageGain(s, currentPrice).toFixed(2)
       ];
     });
     
@@ -205,15 +147,7 @@ export default function Shares() {
       `Total Profit,$${totalProfit.toFixed(2)},${totalProfitPercentage.toFixed(2)}%`
     ].join('\n');
     
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `shares-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    downloadCSV(csvContent, `shares-${getCurrentDateString()}.csv`);
   };
 
   return (
@@ -439,11 +373,11 @@ export default function Shares() {
                           </tr>
                           {/* Shares for this year */}
                           {yearShares.map((share, index) => {
-                            const profitPerShare = calculateProfitPerShare(share);
-                            const totalProfit = calculateProfit(share);
-                            const percentageGain = calculatePercentageGain(share);
                             const currentPrice = getCurrentPrice(share.ticker);
-                            const eurPrice = getPurchasePriceEur(share);
+                            const profitPerShare = calculateProfitPerShare(share, currentPrice);
+                            const shareProfit = calculateTotalProfit(share, currentPrice);
+                            const percentageGain = calculatePercentageGain(share, currentPrice);
+                            const eurPrice = getPurchasePriceEur(share, exchangeRates);
                             
                             // Check if this is the first occurrence of this ticker across all shares
                             const isFirstOccurrence = shares.findIndex(s => s.ticker === share.ticker) === shares.findIndex(s => s.id === share.id);
@@ -478,14 +412,14 @@ export default function Shares() {
                                 <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${profitPerShare >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   ${profitPerShare.toFixed(2)}
                                 </td>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  ${totalProfit.toFixed(2)}
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${shareProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ${shareProfit.toFixed(2)}
                                 </td>
                                 <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${percentageGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                   {percentageGain >= 0 ? '+' : ''}{percentageGain.toFixed(2)}%
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                  {new Date(share.purchaseDate).toLocaleDateString()}
+                                  {formatDate(share.purchaseDate)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                                   <button

@@ -2,18 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-
-interface Dividend {
-  id: string;
-  dollarAmount: number;
-  euroAmount: number;
-  paymentDate: string;
-  exchangeRate: number;
-}
-
-interface ExchangeRates {
-  [date: string]: number;
-}
+import type { Dividend, ExchangeRates, DateRange } from './types';
+import { loadFromStorage, saveToStorage } from './utils/storage';
+import { loadExchangeRates, getDateRange, getExchangeRate } from './utils/exchangeRates';
+import { calculateTotalDollars, calculateTotalEuros } from './utils/calculations';
+import { downloadCSV, formatDate, getCurrentDateString } from './utils/export';
 
 export default function Home() {
   const [dividends, setDividends] = useState<Dividend[]>([]);
@@ -22,60 +15,29 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(true);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({});
-  const [dateRange, setDateRange] = useState<{ min: string; max: string } | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
-    loadDividends();
-    loadExchangeRates();
-    loadFormState();
-  }, []);
+    const storedDividends = loadFromStorage<Dividend[]>('dividends', []);
+    setDividends(storedDividends);
+    setLoading(false);
 
-  const loadDividends = () => {
-    try {
-      const stored = localStorage.getItem('dividends');
-      if (stored) {
-        setDividends(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load dividends:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const storedFormState = loadFromStorage<boolean>('isFormOpen', true);
+    setIsFormOpen(storedFormState);
 
-  const loadExchangeRates = async () => {
-    try {
-      const response = await fetch('/exchange-rates.json');
-      const rates = await response.json();
+    const loadRates = async () => {
+      const rates = await loadExchangeRates();
       setExchangeRates(rates);
-      
-      const dates = Object.keys(rates).sort();
-      if (dates.length > 0) {
-        setDateRange({
-          min: dates[0],
-          max: dates[dates.length - 1]
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load exchange rates:', error);
-    }
-  };
-
-  const loadFormState = () => {
-    try {
-      const stored = localStorage.getItem('isFormOpen');
-      if (stored !== null) {
-        setIsFormOpen(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load form state:', error);
-    }
-  };
+      const range = getDateRange(rates);
+      setDateRange(range);
+    };
+    loadRates();
+  }, []);
 
   const toggleForm = () => {
     const newState = !isFormOpen;
     setIsFormOpen(newState);
-    localStorage.setItem('isFormOpen', JSON.stringify(newState));
+    saveToStorage('isFormOpen', newState);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -84,7 +46,7 @@ export default function Home() {
     const dollars = parseFloat(dollarAmount);
     if (isNaN(dollars) || !paymentDate) return;
 
-    const rate = exchangeRates[paymentDate];
+    const rate = getExchangeRate(exchangeRates, paymentDate);
     if (!rate) {
       alert('Exchange rate not available for this date. Please select a different date.');
       return;
@@ -100,7 +62,7 @@ export default function Home() {
 
     const updatedDividends = [...dividends, newDividend];
     setDividends(updatedDividends);
-    localStorage.setItem('dividends', JSON.stringify(updatedDividends));
+    saveToStorage('dividends', updatedDividends);
     
     setDollarAmount('');
     setPaymentDate('');
@@ -109,16 +71,16 @@ export default function Home() {
   const handleDelete = (id: string) => {
     const updatedDividends = dividends.filter(d => d.id !== id);
     setDividends(updatedDividends);
-    localStorage.setItem('dividends', JSON.stringify(updatedDividends));
+    saveToStorage('dividends', updatedDividends);
   };
 
-  const totalDollars = dividends.reduce((sum, d) => sum + d.dollarAmount, 0);
-  const totalEuros = dividends.reduce((sum, d) => sum + d.euroAmount, 0);
+  const totalDollars = calculateTotalDollars(dividends);
+  const totalEuros = calculateTotalEuros(dividends);
 
   const handleExport = () => {
     const headers = ['Payment Date', 'USD Amount', 'Exchange Rate', 'EUR Amount'];
     const rows = dividends.map(d => [
-      new Date(d.paymentDate).toLocaleDateString(),
+      formatDate(d.paymentDate),
       d.dollarAmount.toFixed(2),
       d.exchangeRate.toFixed(4),
       d.euroAmount.toFixed(2)
@@ -131,15 +93,7 @@ export default function Home() {
       `Total,${totalDollars.toFixed(2)},,${totalEuros.toFixed(2)}`
     ].join('\n');
     
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dividends-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    downloadCSV(csvContent, `dividends-${getCurrentDateString()}.csv`);
   };
 
   return (
@@ -207,7 +161,7 @@ export default function Home() {
                   />
                   {dateRange && (
                     <p className="mt-1 text-xs text-gray-500">
-                      Exchange rates available from {new Date(dateRange.min).toLocaleDateString()} to {new Date(dateRange.max).toLocaleDateString()}
+                      Exchange rates available from {formatDate(dateRange.min)} to {formatDate(dateRange.max)}
                     </p>
                   )}
                 </div>
@@ -259,7 +213,7 @@ export default function Home() {
                   {dividends.map((dividend) => (
                     <tr key={dividend.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(dividend.paymentDate).toLocaleDateString()}
+                      {formatDate(dividend.paymentDate)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                         ${dividend.dollarAmount.toFixed(2)}
