@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface Share {
@@ -8,12 +8,16 @@ interface Share {
   ticker: string;
   sharesHeld: number;
   purchasePrice: number;
-  currentPrice: number;
   purchaseDate: string;
+}
+
+interface TickerPrice {
+  [ticker: string]: number;
 }
 
 export default function Shares() {
   const [shares, setShares] = useState<Share[]>([]);
+  const [tickerPrices, setTickerPrices] = useState<TickerPrice>({});
   const [ticker, setTicker] = useState('');
   const [sharesHeld, setSharesHeld] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
@@ -24,6 +28,7 @@ export default function Shares() {
 
   useEffect(() => {
     loadShares();
+    loadTickerPrices();
     loadFormState();
   }, []);
 
@@ -37,6 +42,17 @@ export default function Shares() {
       console.error('Failed to load shares:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTickerPrices = () => {
+    try {
+      const stored = localStorage.getItem('tickerPrices');
+      if (stored) {
+        setTickerPrices(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Failed to load ticker prices:', error);
     }
   };
 
@@ -57,6 +73,17 @@ export default function Shares() {
     localStorage.setItem('isSharesFormOpen', JSON.stringify(newState));
   };
 
+  // Auto-populate current price when ticker changes
+  useEffect(() => {
+    if (ticker) {
+      const tickerUpper = ticker.toUpperCase();
+      const existingPrice = tickerPrices[tickerUpper];
+      if (existingPrice !== undefined) {
+        setCurrentPrice(existingPrice.toString());
+      }
+    }
+  }, [ticker, tickerPrices]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -68,18 +95,24 @@ export default function Shares() {
       return;
     }
 
+    const tickerUpper = ticker.toUpperCase();
+    
     const newShare: Share = {
       id: Date.now().toString(),
-      ticker: ticker.toUpperCase(),
+      ticker: tickerUpper,
       sharesHeld: shares_held,
       purchasePrice: purchase_price,
-      currentPrice: current_price,
       purchaseDate,
     };
 
     const updatedShares = [...shares, newShare];
     setShares(updatedShares);
     localStorage.setItem('shares', JSON.stringify(updatedShares));
+    
+    // Update ticker price
+    const updatedPrices = { ...tickerPrices, [tickerUpper]: current_price };
+    setTickerPrices(updatedPrices);
+    localStorage.setItem('tickerPrices', JSON.stringify(updatedPrices));
     
     setTicker('');
     setSharesHeld('');
@@ -94,28 +127,33 @@ export default function Shares() {
     localStorage.setItem('shares', JSON.stringify(updatedShares));
   };
 
-  const handleUpdateCurrentPrice = (id: string, newPrice: number) => {
-    const updatedShares = shares.map(s => 
-      s.id === id ? { ...s, currentPrice: newPrice } : s
-    );
-    setShares(updatedShares);
-    localStorage.setItem('shares', JSON.stringify(updatedShares));
+  const handleUpdateCurrentPrice = (ticker: string, newPrice: number) => {
+    const updatedPrices = { ...tickerPrices, [ticker]: newPrice };
+    setTickerPrices(updatedPrices);
+    localStorage.setItem('tickerPrices', JSON.stringify(updatedPrices));
+  };
+
+  const getCurrentPrice = (ticker: string) => {
+    return tickerPrices[ticker] || 0;
   };
 
   const calculateProfit = (share: Share) => {
-    return (share.currentPrice - share.purchasePrice) * share.sharesHeld;
+    const currentPrice = getCurrentPrice(share.ticker);
+    return (currentPrice - share.purchasePrice) * share.sharesHeld;
   };
 
   const calculateProfitPerShare = (share: Share) => {
-    return share.currentPrice - share.purchasePrice;
+    const currentPrice = getCurrentPrice(share.ticker);
+    return currentPrice - share.purchasePrice;
   };
 
   const calculatePercentageGain = (share: Share) => {
-    return ((share.currentPrice - share.purchasePrice) / share.purchasePrice) * 100;
+    const currentPrice = getCurrentPrice(share.ticker);
+    return ((currentPrice - share.purchasePrice) / share.purchasePrice) * 100;
   };
 
   const totalInvestment = shares.reduce((sum, s) => sum + (s.purchasePrice * s.sharesHeld), 0);
-  const currentValue = shares.reduce((sum, s) => sum + (s.currentPrice * s.sharesHeld), 0);
+  const currentValue = shares.reduce((sum, s) => sum + (getCurrentPrice(s.ticker) * s.sharesHeld), 0);
   const totalProfit = currentValue - totalInvestment;
   const totalProfitPercentage = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
 
@@ -125,7 +163,7 @@ export default function Shares() {
       s.ticker,
       s.sharesHeld.toString(),
       s.purchasePrice.toFixed(2),
-      s.currentPrice.toFixed(2),
+      getCurrentPrice(s.ticker).toFixed(2),
       new Date(s.purchaseDate).toLocaleDateString(),
       calculateProfitPerShare(s).toFixed(2),
       calculateProfit(s).toFixed(2),
@@ -292,104 +330,150 @@ export default function Shares() {
         )}
 
         {/* Shares Table */}
-        {shares.length > 0 && (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="flex items-center justify-between p-6 pb-4">
-              <h3 className="text-xl font-semibold text-gray-900">Share Holdings</h3>
-              <button
-                onClick={handleExport}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium text-sm"
-              >
-                Export CSV
-              </button>
+        {shares.length > 0 && (() => {
+          // Group shares by year
+          const sharesByYear = shares.reduce((acc, share) => {
+            const year = new Date(share.purchaseDate).getFullYear();
+            if (!acc[year]) {
+              acc[year] = [];
+            }
+            acc[year].push(share);
+            return acc;
+          }, {} as Record<number, Share[]>);
+
+          // Sort shares within each year by date (ascending - oldest first)
+          Object.keys(sharesByYear).forEach(year => {
+            sharesByYear[Number(year)].sort((a, b) => 
+              new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime()
+            );
+          });
+
+          // Sort years in ascending order (oldest first)
+          const sortedYears = Object.keys(sharesByYear).map(Number).sort((a, b) => a - b);
+
+          return (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="flex items-center justify-between p-6 pb-4">
+                <h3 className="text-xl font-semibold text-gray-900">Share Holdings</h3>
+                <button
+                  onClick={handleExport}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium text-sm"
+                >
+                  Export CSV
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-y border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Ticker
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Shares
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Purchase Price
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Current Price
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Profit/Share
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total Profit
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Gain %
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Purchase Date
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedYears.map(year => {
+                      const yearShares = sharesByYear[year];
+                      return (
+                        <React.Fragment key={year}>
+                          {/* Year divider */}
+                          <tr className="bg-gray-100">
+                            <td colSpan={9} className="px-6 py-3">
+                              <div className="font-semibold text-gray-700 text-sm">
+                                {year}
+                              </div>
+                            </td>
+                          </tr>
+                          {/* Shares for this year */}
+                          {yearShares.map((share, index) => {
+                            const profitPerShare = calculateProfitPerShare(share);
+                            const totalProfit = calculateProfit(share);
+                            const percentageGain = calculatePercentageGain(share);
+                            const currentPrice = getCurrentPrice(share.ticker);
+                            
+                            // Check if this is the first occurrence of this ticker across all shares
+                            const isFirstOccurrence = shares.findIndex(s => s.ticker === share.ticker) === shares.findIndex(s => s.id === share.id);
+                            
+                            return (
+                              <tr key={share.id} className="hover:bg-gray-50 border-b border-gray-200">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {share.ticker}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                  {share.sharesHeld}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                  ${share.purchasePrice.toFixed(2)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                  {isFirstOccurrence ? (
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={currentPrice}
+                                      onChange={(e) => handleUpdateCurrentPrice(share.ticker, parseFloat(e.target.value) || 0)}
+                                      className="w-24 px-2 py-1 border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                  ) : (
+                                    <span>${currentPrice.toFixed(2)}</span>
+                                  )}
+                                </td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${profitPerShare >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ${profitPerShare.toFixed(2)}
+                                </td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ${totalProfit.toFixed(2)}
+                                </td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${percentageGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {percentageGain >= 0 ? '+' : ''}{percentageGain.toFixed(2)}%
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {new Date(share.purchaseDate).toLocaleDateString()}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                  <button
+                                    onClick={() => handleDelete(share.id)}
+                                    className="text-red-600 hover:text-red-800 font-medium"
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-y border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ticker
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Shares
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Purchase Price
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Current Price
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Profit/Share
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Profit
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Gain %
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Purchase Date
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {shares.map((share) => {
-                    const profitPerShare = calculateProfitPerShare(share);
-                    const totalProfit = calculateProfit(share);
-                    const percentageGain = calculatePercentageGain(share);
-                    
-                    return (
-                      <tr key={share.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {share.ticker}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                          {share.sharesHeld}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                          ${share.purchasePrice.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={share.currentPrice}
-                            onChange={(e) => handleUpdateCurrentPrice(share.id, parseFloat(e.target.value) || 0)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${profitPerShare >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          ${profitPerShare.toFixed(2)}
-                        </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          ${totalProfit.toFixed(2)}
-                        </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${percentageGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {percentageGain >= 0 ? '+' : ''}{percentageGain.toFixed(2)}%
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(share.purchaseDate).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                          <button
-                            onClick={() => handleDelete(share.id)}
-                            className="text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </main>
   );
