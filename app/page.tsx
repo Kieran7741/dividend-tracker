@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface Dividend {
   id: string;
@@ -144,6 +145,15 @@ export default function Home() {
   return (
     <main className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-4xl mx-auto">
+        <div className="mb-6 flex justify-end">
+          <Link 
+            href="/shares" 
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            View Share Holdings →
+          </Link>
+        </div>
+        
         <h2 className="text-3xl font-bold mb-2 text-gray-900">Gross Dividend Calculator</h2>
         <p className="text-gray-600 mb-8">
           Track your USD dividend payments and calculate their EUR value using official ECB exchange rates. Note: this tool does not send any data to a server; all information is stored locally in your browser.
