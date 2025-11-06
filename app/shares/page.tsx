@@ -15,9 +15,14 @@ interface TickerPrice {
   [ticker: string]: number;
 }
 
+interface ExchangeRates {
+  [date: string]: number;
+}
+
 export default function Shares() {
   const [shares, setShares] = useState<Share[]>([]);
   const [tickerPrices, setTickerPrices] = useState<TickerPrice>({});
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({});
   const [ticker, setTicker] = useState('');
   const [sharesHeld, setSharesHeld] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
@@ -29,6 +34,7 @@ export default function Shares() {
   useEffect(() => {
     loadShares();
     loadTickerPrices();
+    loadExchangeRates();
     loadFormState();
   }, []);
 
@@ -53,6 +59,16 @@ export default function Shares() {
       }
     } catch (error) {
       console.error('Failed to load ticker prices:', error);
+    }
+  };
+
+  const loadExchangeRates = async () => {
+    try {
+      const response = await fetch('/exchange-rates.json');
+      const rates = await response.json();
+      setExchangeRates(rates);
+    } catch (error) {
+      console.error('Failed to load exchange rates:', error);
     }
   };
 
@@ -137,6 +153,12 @@ export default function Shares() {
     return tickerPrices[ticker] || 0;
   };
 
+  const getPurchasePriceEur = (share: Share) => {
+    const rate = exchangeRates[share.purchaseDate];
+    if (!rate) return null;
+    return share.purchasePrice / rate;
+  };
+
   const calculateProfit = (share: Share) => {
     const currentPrice = getCurrentPrice(share.ticker);
     return (currentPrice - share.purchasePrice) * share.sharesHeld;
@@ -158,17 +180,21 @@ export default function Shares() {
   const totalProfitPercentage = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
 
   const handleExport = () => {
-    const headers = ['Ticker', 'Shares Held', 'Purchase Price', 'Current Price', 'Purchase Date', 'Profit per Share', 'Total Profit', 'Gain %'];
-    const rows = shares.map(s => [
-      s.ticker,
-      s.sharesHeld.toString(),
-      s.purchasePrice.toFixed(2),
-      getCurrentPrice(s.ticker).toFixed(2),
-      new Date(s.purchaseDate).toLocaleDateString(),
-      calculateProfitPerShare(s).toFixed(2),
-      calculateProfit(s).toFixed(2),
-      calculatePercentageGain(s).toFixed(2)
-    ]);
+    const headers = ['Ticker', 'Shares Held', 'Purchase Price (USD)', 'Purchase Price (EUR)', 'Current Price', 'Purchase Date', 'Profit per Share', 'Total Profit', 'Gain %'];
+    const rows = shares.map(s => {
+      const eurPrice = getPurchasePriceEur(s);
+      return [
+        s.ticker,
+        s.sharesHeld.toString(),
+        s.purchasePrice.toFixed(2),
+        eurPrice ? eurPrice.toFixed(2) : 'N/A',
+        getCurrentPrice(s.ticker).toFixed(2),
+        new Date(s.purchaseDate).toLocaleDateString(),
+        calculateProfitPerShare(s).toFixed(2),
+        calculateProfit(s).toFixed(2),
+        calculatePercentageGain(s).toFixed(2)
+      ];
+    });
     
     const csvContent = [
       headers.join(','),
@@ -372,12 +398,15 @@ export default function Shares() {
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Shares
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Purchase Price
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Current Price
-                      </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Purchase Price (USD)
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Purchase Price (EUR)
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Current Price
+                    </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Profit/Share
                       </th>
@@ -402,7 +431,7 @@ export default function Shares() {
                         <React.Fragment key={year}>
                           {/* Year divider */}
                           <tr className="bg-gray-100">
-                            <td colSpan={9} className="px-6 py-3">
+                            <td colSpan={10} className="px-6 py-3">
                               <div className="font-semibold text-gray-700 text-sm">
                                 {year}
                               </div>
@@ -414,6 +443,7 @@ export default function Shares() {
                             const totalProfit = calculateProfit(share);
                             const percentageGain = calculatePercentageGain(share);
                             const currentPrice = getCurrentPrice(share.ticker);
+                            const eurPrice = getPurchasePriceEur(share);
                             
                             // Check if this is the first occurrence of this ticker across all shares
                             const isFirstOccurrence = shares.findIndex(s => s.ticker === share.ticker) === shares.findIndex(s => s.id === share.id);
@@ -428,6 +458,9 @@ export default function Shares() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                                   ${share.purchasePrice.toFixed(2)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                  {eurPrice ? `€${eurPrice.toFixed(2)}` : 'N/A'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                                   {isFirstOccurrence ? (
