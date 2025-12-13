@@ -5,19 +5,28 @@ import { loadExchangeRates, getDateRange, getExchangeRate } from '../utils/excha
 import { calculateTotalDollars, calculateTotalEuros } from '../utils/calculations';
 
 export function useDividendCalculator() {
-  const [dividends, setDividends] = useState<Dividend[]>(() => 
-    loadFromStorage<Dividend[]>('dividends', [])
-  );
+  const [mounted, setMounted] = useState(false);
+  const [dividends, setDividends] = useState<Dividend[]>([]);
   const [dollarAmount, setDollarAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
-  const [isFormOpen, setIsFormOpen] = useState(() => 
-    loadFromStorage<boolean>('isFormOpen', true)
-  );
+  const [isFormOpen, setIsFormOpen] = useState(true);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({});
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
+  // Load from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
+    // Defer state updates to avoid cascading renders warning
+    queueMicrotask(() => {
+      const storedDividends = loadFromStorage<Dividend[]>('dividends', []);
+      const storedFormOpen = loadFromStorage<boolean>('isFormOpen', true);
+      
+      setDividends(storedDividends);
+      setIsFormOpen(storedFormOpen);
+      setMounted(true);
+    });
+  }, []);
 
+  useEffect(() => {
     const loadRates = async () => {
       const rates = await loadExchangeRates();
       setExchangeRates(rates);
@@ -72,6 +81,7 @@ export function useDividendCalculator() {
 
   return {
     // State
+    mounted,
     dividends,
     dollarAmount,
     paymentDate,

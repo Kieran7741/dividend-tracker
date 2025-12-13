@@ -6,6 +6,7 @@ import { downloadCSV, formatDate, getCurrentDateString } from './utils/export';
 
 export default function Home() {
   const {
+    mounted,
     dividends,
     dollarAmount,
     paymentDate,
@@ -102,11 +103,11 @@ export default function Home() {
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                   />
-                  {dateRange && (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Exchange rates available from {formatDate(dateRange.min)} to {formatDate(dateRange.max)}
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    {dateRange 
+                      ? `Exchange rates available from ${formatDate(dateRange.min)} to ${formatDate(dateRange.max)}`
+                      : 'Exchange rates available from 04/01/1999 to 12/12/2025'}
+                  </p>
                 </div>
                 <button
                   type="submit"
@@ -120,7 +121,7 @@ export default function Home() {
         </div>
 
         {/* Dividends Table */}
-        {dividends.length > 0 && (
+        {mounted && dividends.length > 0 && (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="flex items-center justify-between p-6 pb-4">
               <h3 className="text-xl font-semibold text-gray-900">Dividend Payments</h3>
