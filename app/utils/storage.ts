@@ -60,6 +60,9 @@ export function migrateDividend(dividend: Partial<Dividend> & { dollarAmount: nu
 
   return {
     ...dividend,
+    id: dividend.id || crypto.randomUUID(),
+    paymentDate: dividend.paymentDate || '',
+    euroAmount: dividend.euroAmount || dividend.dollarAmount / dividend.exchangeRate,
     usWithholdingRate,
     usWithholdingAmount,
     euTaxAmount: dividend.euTaxAmount || euTaxAmount || undefined,
