@@ -15,7 +15,7 @@ A Next.js web application for tracking dividend payments and calculating their E
 
 ### Prerequisites
 
-- Node.js 20+ installed
+- Node.js 24+ installed
 - npm, yarn, pnpm, or bun
 
 ### Installation
