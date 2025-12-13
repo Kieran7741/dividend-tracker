@@ -14,6 +14,7 @@ import {
   calculatePortfolioProfit,
   getPurchasePriceEur
 } from '../utils/calculations';
+import WarningBanner from '../components/WarningBanner';
 import { downloadCSV, formatDate, getCurrentDateString } from '../utils/export';
 
 export default function Shares() {
@@ -162,6 +163,8 @@ export default function Shares() {
           </Link>
         </div>
         
+        <WarningBanner />
+
         <h2 className="text-3xl font-bold mb-2 text-gray-900">Share Holdings Tracker</h2>
         <p className="text-gray-600 mb-8">
           Track your share holdings and monitor profit per share. All data is stored locally in your browser.

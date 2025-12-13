@@ -18,15 +18,27 @@ describe('Home Component', () => {
   const mockUseDividendCalculator = useDividendCalculator as jest.MockedFunction<typeof useDividendCalculator>;
 
   const defaultHookReturn = {
+    mounted: true,
     dividends: [],
     dollarAmount: '',
     paymentDate: '',
+    usWithholdingRate: 15,
+    euCountry: '',
+    irishMarginalRate: 52.1,
     isFormOpen: true,
     dateRange: { min: '2024-01-01', max: '2024-12-31' },
     totalDollars: 0,
     totalEuros: 0,
+    totalUSWithholding: 0,
+    totalEUTax: 0,
+    totalNetUSD: 0,
+    totalNetEUR: 0,
+    euCountryRates: [],
     setDollarAmount: jest.fn(),
     setPaymentDate: jest.fn(),
+    setUsWithholdingRate: jest.fn(),
+    setEuCountry: jest.fn(),
+    setIrishMarginalRate: jest.fn(),
     toggleForm: jest.fn(),
     handleSubmit: jest.fn(),
     handleDelete: jest.fn(),
@@ -40,12 +52,7 @@ describe('Home Component', () => {
   describe('Page Structure', () => {
     it('should render the page title', () => {
       render(<Home />);
-      expect(screen.getByText('Gross Dividend Calculator')).toBeInTheDocument();
-    });
-
-    it('should render the page description', () => {
-      render(<Home />);
-      expect(screen.getByText(/Track your USD dividend payments/)).toBeInTheDocument();
+      expect(screen.getByText('Dividend Tax Calculator')).toBeInTheDocument();
     });
 
     it('should render link to shares page', () => {
@@ -149,6 +156,10 @@ describe('Home Component', () => {
         paymentDate: '2024-01-01',
         euroAmount: 90.91,
         exchangeRate: 1.1,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 15,
+        netAmountUSD: 85,
+        netAmountEUR: 77.27,
       },
       {
         id: '2',
@@ -156,6 +167,10 @@ describe('Home Component', () => {
         paymentDate: '2024-01-15',
         euroAmount: 173.91,
         exchangeRate: 1.15,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 30,
+        netAmountUSD: 170,
+        netAmountEUR: 147.83,
       },
     ];
 
@@ -170,6 +185,9 @@ describe('Home Component', () => {
         dividends: mockDividends,
         totalDollars: 300,
         totalEuros: 264.82,
+        totalUSWithholding: 45,
+        totalNetUSD: 255,
+        totalNetEUR: 225.1,
       });
 
       render(<Home />);
@@ -182,13 +200,14 @@ describe('Home Component', () => {
         dividends: mockDividends,
         totalDollars: 300,
         totalEuros: 264.82,
+        totalUSWithholding: 45,
+        totalNetUSD: 255,
+        totalNetEUR: 225.1,
       });
 
       render(<Home />);
       expect(screen.getByText('$100.00')).toBeInTheDocument();
       expect(screen.getByText('$200.00')).toBeInTheDocument();
-      expect(screen.getByText('1.1000')).toBeInTheDocument();
-      expect(screen.getByText('1.1500')).toBeInTheDocument();
     });
 
     it('should display totals correctly', () => {
@@ -197,11 +216,14 @@ describe('Home Component', () => {
         dividends: mockDividends,
         totalDollars: 300,
         totalEuros: 264.82,
+        totalUSWithholding: 45,
+        totalNetUSD: 255,
+        totalNetEUR: 225.1,
       });
 
       render(<Home />);
       expect(screen.getByText('$300.00')).toBeInTheDocument();
-      expect(screen.getByText('€264.82')).toBeInTheDocument();
+      expect(screen.getByText('$255.00')).toBeInTheDocument();
     });
 
     it('should call handleDelete when delete button is clicked', () => {
@@ -209,6 +231,9 @@ describe('Home Component', () => {
       mockUseDividendCalculator.mockReturnValue({
         ...defaultHookReturn,
         dividends: mockDividends,
+        totalUSWithholding: 45,
+        totalNetUSD: 255,
+        totalNetEUR: 225.1,
         handleDelete,
       });
 
@@ -224,6 +249,9 @@ describe('Home Component', () => {
       mockUseDividendCalculator.mockReturnValue({
         ...defaultHookReturn,
         dividends: mockDividends,
+        totalUSWithholding: 45,
+        totalNetUSD: 255,
+        totalNetEUR: 225.1,
       });
 
       render(<Home />);
@@ -239,6 +267,10 @@ describe('Home Component', () => {
         paymentDate: '2024-01-01',
         euroAmount: 90.91,
         exchangeRate: 1.1,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 15,
+        netAmountUSD: 85,
+        netAmountEUR: 77.27,
       },
     ];
 
@@ -248,6 +280,9 @@ describe('Home Component', () => {
         dividends: mockDividends,
         totalDollars: 100,
         totalEuros: 90.91,
+        totalUSWithholding: 15,
+        totalNetUSD: 85,
+        totalNetEUR: 77.27,
       });
 
       render(<Home />);
@@ -259,7 +294,7 @@ describe('Home Component', () => {
       const downloadCSVMock = exportUtils.downloadCSV as jest.Mock;
       const [csvContent, filename] = downloadCSVMock.mock.calls[0];
       expect(csvContent).toContain('Payment Date');
-      expect(csvContent).toContain('USD Amount');
+      expect(csvContent).toContain('Gross USD');
       expect(filename).toContain('.csv');
     });
   });

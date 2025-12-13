@@ -6,6 +6,9 @@ import * as exchangeRates from '../utils/exchangeRates';
 // Mock dependencies
 jest.mock('../utils/storage');
 jest.mock('../utils/exchangeRates');
+jest.mock('../utils/taxCalculations', () => ({
+  ...jest.requireActual('../utils/taxCalculations'),
+}));
 
 describe('useDividendCalculator', () => {
   const mockExchangeRates = {
@@ -15,7 +18,8 @@ describe('useDividendCalculator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (storage.loadFromStorage as jest.Mock).mockReturnValue([]);
+    (storage.loadDividends as jest.Mock) = jest.fn().mockReturnValue([]);
+    (storage.loadFromStorage as jest.Mock).mockReturnValue(true);
     (storage.saveToStorage as jest.Mock).mockImplementation(() => {});
     (exchangeRates.loadExchangeRates as jest.Mock).mockResolvedValue(mockExchangeRates);
     (exchangeRates.getDateRange as jest.Mock).mockReturnValue({
@@ -46,12 +50,19 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-01',
         euroAmount: 90.91,
         exchangeRate: 1.1,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 15,
+        netAmountUSD: 85,
+        netAmountEUR: 77.27,
       },
     ];
-    (storage.loadFromStorage as jest.Mock).mockReturnValue(storedDividends);
+    (storage.loadDividends as jest.Mock).mockReturnValue(storedDividends);
 
     const { result } = renderHook(() => useDividendCalculator());
-    expect(result.current.dividends).toEqual(storedDividends);
+    
+    await waitFor(() => {
+      expect(result.current.dividends).toEqual(storedDividends);
+    });
     
     // Wait for async effects to complete
     await waitFor(() => {
@@ -221,6 +232,10 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-01',
         euroAmount: 90.91,
         exchangeRate: 1.1,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 15,
+        netAmountUSD: 85,
+        netAmountEUR: 77.27,
       },
       {
         id: '2',
@@ -228,9 +243,13 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-15',
         euroAmount: 173.91,
         exchangeRate: 1.15,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 30,
+        netAmountUSD: 170,
+        netAmountEUR: 147.83,
       },
     ];
-    (storage.loadFromStorage as jest.Mock).mockReturnValue(storedDividends);
+    (storage.loadDividends as jest.Mock).mockReturnValue(storedDividends);
 
     const { result } = renderHook(() => useDividendCalculator());
     
@@ -239,7 +258,9 @@ describe('useDividendCalculator', () => {
       expect(exchangeRates.loadExchangeRates).toHaveBeenCalled();
     });
     
-    expect(result.current.dividends).toHaveLength(2);
+    await waitFor(() => {
+      expect(result.current.dividends).toHaveLength(2);
+    });
     
     act(() => {
       result.current.handleDelete('1');
@@ -258,6 +279,10 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-01',
         euroAmount: 90.91,
         exchangeRate: 1.1,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 15,
+        netAmountUSD: 85,
+        netAmountEUR: 77.27,
       },
       {
         id: '2',
@@ -265,18 +290,20 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-15',
         euroAmount: 173.91,
         exchangeRate: 1.15,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 30,
+        netAmountUSD: 170,
+        netAmountEUR: 147.83,
       },
     ];
-    (storage.loadFromStorage as jest.Mock).mockReturnValue(storedDividends);
+    (storage.loadDividends as jest.Mock).mockReturnValue(storedDividends);
 
     const { result } = renderHook(() => useDividendCalculator());
     
     // Wait for initial mount effects
     await waitFor(() => {
-      expect(exchangeRates.loadExchangeRates).toHaveBeenCalled();
+      expect(result.current.totalDollars).toBe(300);
     });
-    
-    expect(result.current.totalDollars).toBe(300);
   });
 
   it('should calculate total euros correctly', async () => {
@@ -287,6 +314,10 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-01',
         euroAmount: 90.91,
         exchangeRate: 1.1,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 15,
+        netAmountUSD: 85,
+        netAmountEUR: 77.27,
       },
       {
         id: '2',
@@ -294,17 +325,19 @@ describe('useDividendCalculator', () => {
         paymentDate: '2024-01-15',
         euroAmount: 173.91,
         exchangeRate: 1.15,
+        usWithholdingRate: 15,
+        usWithholdingAmount: 30,
+        netAmountUSD: 170,
+        netAmountEUR: 147.83,
       },
     ];
-    (storage.loadFromStorage as jest.Mock).mockReturnValue(storedDividends);
+    (storage.loadDividends as jest.Mock).mockReturnValue(storedDividends);
 
     const { result } = renderHook(() => useDividendCalculator());
     
     // Wait for initial mount effects
     await waitFor(() => {
-      expect(exchangeRates.loadExchangeRates).toHaveBeenCalled();
+      expect(result.current.totalEuros).toBeCloseTo(264.82, 2);
     });
-    
-    expect(result.current.totalEuros).toBeCloseTo(264.82, 2);
   });
 });
